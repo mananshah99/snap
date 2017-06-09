@@ -8,7 +8,7 @@
 
 void ParseArgs(int& argc, char* argv[], TStr& InFile, TStr& OutFile,
  int& Dimensions, int& WalkLen, int& NumWalks, int& WinSize, int& Iter,
- bool& Verbose, double& ParamP, double& ParamQ, bool& Directed, bool& Weighted) {
+ bool& Verbose, double& ParamP, double& ParamQ, double& NumRandomSample, bool& Directed, bool& Weighted) {
   Env = TEnv(argc, argv, TNotify::StdNotify);
   Env.PrepArgs(TStr::Fmt("\nAn algorithmic framework for representational learning on graphs."));
   InFile = Env.GetIfArgPrefixStr("-i:", "graph/karate.edgelist",
@@ -29,6 +29,9 @@ void ParseArgs(int& argc, char* argv[], TStr& InFile, TStr& OutFile,
    "Return hyperparameter. Default is 1");
   ParamQ = Env.GetIfArgPrefixFlt("-q:", 1,
    "Inout hyperparameter. Default is 1");
+  NumRandomSample = Env.GetIfArgPrefixInt("-s:", -1, 
+   "Number of randomly sampled nodes. Default is -1 (sample all nodes)");
+      
   Verbose = Env.IsArgStr("-v", "Verbose output.");
   Directed = Env.IsArgStr("-dr", "Graph is directed.");
   Weighted = Env.IsArgStr("-w", "Graph is weighted.");
@@ -88,15 +91,15 @@ void WriteOutput(TStr& OutFile, TIntFltVH& EmbeddingsHV) {
 int main(int argc, char* argv[]) {
   TStr InFile,OutFile;
   int Dimensions, WalkLen, NumWalks, WinSize, Iter;
-  double ParamP, ParamQ;
+  double ParamP, ParamQ, NumRandomSample;
   bool Directed, Weighted, Verbose;
   ParseArgs(argc, argv, InFile, OutFile, Dimensions, WalkLen, NumWalks, WinSize,
-   Iter, Verbose, ParamP, ParamQ, Directed, Weighted);
+   Iter, Verbose, ParamP, ParamQ, NumRandomSample, Directed, Weighted);
   PWNet InNet = PWNet::New();
   TIntFltVH EmbeddingsHV;
   ReadGraph(InFile, Directed, Weighted, Verbose, InNet);
   node2vec(InNet, ParamP, ParamQ, Dimensions, WalkLen, NumWalks, WinSize, Iter, 
-   Verbose, EmbeddingsHV);
+   Verbose, EmbeddingsHV, NumRandomSample);
   WriteOutput(OutFile, EmbeddingsHV);
   return 0;
 }
