@@ -18,7 +18,7 @@ void node2vec(PWNet& InNet, double& ParamP, double& ParamQ, int& Dimensions,
       len = NumRandomSample;
   else
       len = NIdsV.Len();
-  printf("Representation matrix will have %d rows", len); 
+  printf("Representation matrix will have %d rows\n", len); 
 
   //Generate random walks
   int64 AllWalks = (int64)NumWalks * len;
