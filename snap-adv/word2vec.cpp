@@ -144,6 +144,7 @@ void TrainModel(TVVec<TInt, int64>& WalksVV, int& Dimensions, int& WinSize, int&
   }
 }
 
+/*Original LearnEmbeddings*/
 
 void LearnEmbeddings(TVVec<TInt, int64>& WalksVV, int& Dimensions, int& WinSize,
  int& Iter, bool& Verbose, TIntFltVH& EmbeddingsHV) {
@@ -151,9 +152,13 @@ void LearnEmbeddings(TVVec<TInt, int64>& WalksVV, int& Dimensions, int& WinSize,
   TIntIntH RnmBackH;
   int64 NNodes = 0;
   //renaming nodes into consecutive numbers
+  printf("XDim : %d\n", WalksVV.GetXDim());
   for (int i = 0; i < WalksVV.GetXDim(); i++) {
+    printf("%d ", WalksVV(i, 0));
     for (int64 j = 0; j < WalksVV.GetYDim(); j++) {
+      //printf("\t Looking at key %d\n", WalksVV(i, j));
       if ( RnmH.IsKey(WalksVV(i, j)) ) {
+        //printf("\t\t Is a Key : Replaced with => %d\n ", RnmH.GetDat(WalksVV(i, j)));
         WalksVV(i, j) = RnmH.GetDat(WalksVV(i, j));
       } else {
         RnmH.AddDat(WalksVV(i,j),NNodes);
@@ -162,6 +167,7 @@ void LearnEmbeddings(TVVec<TInt, int64>& WalksVV, int& Dimensions, int& WinSize,
       }
     }
   }
+  printf("After resort -> WalksVV : (%d, %d)\n", WalksVV.GetXDim(), WalksVV.GetYDim());
   TIntV Vocab(NNodes);
   LearnVocab(WalksVV, Vocab);
   TIntV KTable(NNodes);
@@ -169,6 +175,7 @@ void LearnEmbeddings(TVVec<TInt, int64>& WalksVV, int& Dimensions, int& WinSize,
   TVVec<TFlt, int64> SynNeg;
   TVVec<TFlt, int64> SynPos;
   TRnd Rnd(time(NULL));
+  printf("Beore InitPosEmb -> Vocab : %d\n", Vocab.Len());
   InitPosEmb(Vocab, Dimensions, Rnd, SynPos);
   InitNegEmb(Vocab, Dimensions, SynNeg);
   InitUnigramTable(Vocab, KTable, UTable);
@@ -190,9 +197,88 @@ void LearnEmbeddings(TVVec<TInt, int64>& WalksVV, int& Dimensions, int& WinSize,
     }
   }
   if (Verbose) { printf("\n"); fflush(stdout); }
+  //printf("EmbeddingsHV -> (%lld, %lld)\n", SynPos.GetXDim(), SynPos.GetYDim());
   for (int64 i = 0; i < SynPos.GetXDim(); i++) {
     TFltV CurrV(SynPos.GetYDim());
     for (int j = 0; j < SynPos.GetYDim(); j++) { CurrV[j] = SynPos(i, j); }
     EmbeddingsHV.AddDat(RnmBackH.GetDat(i), CurrV);
+  }
+}
+
+/* Modified (overloaded) LearnEmbeddings */
+ 
+void LearnEmbeddings(TVVec<TInt, int64>& WalksVV, int& Dimensions, int& WinSize,
+ int& Iter, bool& Verbose, TIntFltVH& EmbeddingsHV, TIntV& SelectedNodes) {
+  TIntIntH RnmH;
+  TIntIntH RnmBackH;
+  int64 NNodes = 0;
+  //renaming nodes into consecutive numbers
+  //printf("XDim : %d\n", WalksVV.GetXDim());
+  for (int i = 0; i < WalksVV.GetXDim(); i++) {
+    //printf("%d ", WalksVV(i, 0));
+    for (int64 j = 0; j < WalksVV.GetYDim(); j++) {
+      //printf("\t Looking at key %d\n", WalksVV(i, j));
+      if ( RnmH.IsKey(WalksVV(i, j)) ) {
+        //printf("\t\t Is a Key : Replaced with => %d\n ", RnmH.GetDat(WalksVV(i, j)));
+        WalksVV(i, j) = RnmH.GetDat(WalksVV(i, j));
+      } else {
+        RnmH.AddDat(WalksVV(i,j),NNodes);
+        RnmBackH.AddDat(NNodes,WalksVV(i, j));
+        WalksVV(i, j) = NNodes++;
+      }
+    }
+  }
+
+  //renaming nodes in the selectednodes function
+  for(int i = 0; i < SelectedNodes.Len(); i++) {
+    SelectedNodes[i] = RnmH.GetDat(SelectedNodes[i]);
+  }
+
+  //printf("After resort -> WalksVV : (%d, %d)\n", WalksVV.GetXDim(), WalksVV.GetYDim());
+  TIntV Vocab(NNodes);
+  LearnVocab(WalksVV, Vocab);
+  TIntV KTable(NNodes);
+  TFltV UTable(NNodes);
+  TVVec<TFlt, int64> SynNeg;
+  TVVec<TFlt, int64> SynPos;
+  TRnd Rnd(time(NULL));
+  //printf("Beore InitPosEmb -> Vocab : %d\n", Vocab.Len());
+  InitPosEmb(Vocab, Dimensions, Rnd, SynPos);
+  InitNegEmb(Vocab, Dimensions, SynNeg);
+  InitUnigramTable(Vocab, KTable, UTable);
+  TFltV ExpTable(TableSize);
+  double Alpha = StartAlpha;                              //learning rate
+#pragma omp parallel for schedule(dynamic)
+  for (int i = 0; i < TableSize; i++ ) {
+    double Value = -MaxExp + static_cast<double>(i) / static_cast<double>(ExpTablePrecision);
+    ExpTable[i] = TMath::Power(TMath::E, Value);
+  }
+  int64 WordCntAll = 0;
+// op RS 2016/09/26, collapse does not compile on Mac OS X
+//#pragma omp parallel for schedule(dynamic) collapse(2)
+  for (int j = 0; j < Iter; j++) {
+#pragma omp parallel for schedule(dynamic)
+    for (int64 i = 0; i < WalksVV.GetXDim(); i++) {
+      TrainModel(WalksVV, Dimensions, WinSize, Iter, Verbose, KTable, UTable,
+       WordCntAll, ExpTable, Alpha, i, Rnd, SynNeg, SynPos); 
+    }
+  }
+  if (Verbose) { printf("\n"); fflush(stdout); }
+  //printf("EmbeddingsHV -> (%lld, %lld)\n", SynPos.GetXDim(), SynPos.GetYDim());
+  
+  for (int64 i = 0; i < SynPos.GetXDim(); i++) {
+    TFltV CurrV(SynPos.GetYDim());
+    for (int j = 0; j < SynPos.GetYDim(); j++) { CurrV[j] = SynPos(i, j); }
+    
+    bool Found = false;
+    for(int k = 0; k < SelectedNodes.Len(); k++) {
+      if (i == SelectedNodes[k])
+        Found = true;
+    }
+    if (Found) {
+        EmbeddingsHV.AddDat(RnmBackH.GetDat(i), CurrV);
+    }
+    //printf("Node %d : %s", RnmBackH.GetDat(i), Found ? "true\n" : "false\n");
+    //EmbeddingsHV.AddDat(RnmBackH.GetDat(i), CurrV);
   }
 }

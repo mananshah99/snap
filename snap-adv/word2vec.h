@@ -5,6 +5,8 @@
 void LearnEmbeddings(TVVec<TInt, int64>& WalksVV, int& Dimensions, int& WinSize,
  int& Iter, bool& Verbose, TIntFltVH& EmbeddingsHV);
 
+void LearnEmbeddings(TVVec<TInt, int64>& WalksVV, int& Dimensions, int& WinSize, int& Iter, bool& Verbose, TIntFltVH& EmbeddingsHV, TIntV& SelectedNodes);
+
 //Max x for e^x. Value taken from original word2vec code.
 const int MaxExp = 6;
 
