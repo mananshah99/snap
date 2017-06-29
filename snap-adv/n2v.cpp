@@ -3,7 +3,7 @@
 
 void node2vec(PWNet& InNet, double& ParamP, double& ParamQ, int& Dimensions,
  int& WalkLen, int& NumWalks, int& WinSize, int& Iter, bool& Verbose,
- TIntFltVH& EmbeddingsHV, double& NumRandomSample) {
+ TIntFltVH& EmbeddingsHV, double& NumRandomSample, TIntV& SelectedNodes) {
   //Preprocess transition probabilities
   PreprocessTransitionProbs(InNet, ParamP, ParamQ, Verbose);
   TIntV NIdsV;
@@ -19,23 +19,40 @@ void node2vec(PWNet& InNet, double& ParamP, double& ParamQ, int& Dimensions,
   else
     len = NIdsV.Len();
 
+  //Handle selected nodes (if they exist)
+  if (!SelectedNodes.Empty()) {
+    len = SelectedNodes.Len();
+  }
+
   //Generate random walks
   int64 AllWalks = (int64)NumWalks * len;
   TVVec<TInt, int64> WalksVV(AllWalks,WalkLen);
   TRnd Rnd(time(NULL));
   int64 WalksDone = 0;
   
-  TIntV SelectedNodes(AllWalks);
+  TIntV SelectedNodes2(AllWalks);
   int t = 0;
 
   NIdsV.Shuffle(Rnd);
   for (int64 i = 0; i < len; i++) {
-    SelectedNodes[t] = NIdsV[i];
+    
+    //Either select the node ID in selectednodes
+    //or a random node
+    TInt CurrNode = NULL;
+    if(!SelectedNodes.Empty()) {
+      CurrNode = SelectedNodes[i];
+    }
+    else {
+      CurrNode = NIdsV[i];
+    }
+    
+    //Either way, put the node in SelectedNodes2
+    SelectedNodes2[t] = CurrNode;
     t += 1;
 #pragma omp parallel for schedule(dynamic)
     for (int64 j = 0; j < NumWalks; j++) {
       TIntV WalkV;
-      SimulateWalk(InNet, NIdsV[i], WalkLen, Rnd, WalkV);
+      SimulateWalk(InNet, CurrNode, WalkLen, Rnd, WalkV);
       for (int64 k = 0; k < WalkV.Len(); k++) {
         WalksVV.PutXY(j * len + i, k, WalkV[k]);
       }
@@ -65,6 +82,7 @@ void node2vec(PWNet& InNet, double& ParamP, double& ParamQ, int& Dimensions,
     }
   }
   */
+
   if (Verbose) {
     printf("\n");
     fflush(stdout);
@@ -73,13 +91,13 @@ void node2vec(PWNet& InNet, double& ParamP, double& ParamQ, int& Dimensions,
   //printf("WalksVV -> YDim : %d\n", WalksVV.GetYDim());
   //printf("SNodes  -> Dim  : %d\n", SelectedNodes.Len());
   //Learning embeddings
-  LearnEmbeddings(WalksVV, Dimensions, WinSize, Iter, Verbose, EmbeddingsHV, SelectedNodes);
+  LearnEmbeddings(WalksVV, Dimensions, WinSize, Iter, Verbose, EmbeddingsHV, SelectedNodes2);
   //printf("Embeddings -> (%d, %d)\n", EmbeddingsHV.GetXDim(), EmbeddingsHV.GetYDim());
 }
 
 void node2vec(PNGraph& InNet, double& ParamP, double& ParamQ, int& Dimensions,
  int& WalkLen, int& NumWalks, int& WinSize, int& Iter, bool& Verbose,
- TIntFltVH& EmbeddingsHV, double& NumRandomSample) {
+ TIntFltVH& EmbeddingsHV, double& NumRandomSample, TIntV& SelectedNodes) {
   PWNet NewNet = PWNet::New();
   for (TNGraph::TEdgeI EI = InNet->BegEI(); EI < InNet->EndEI(); EI++) {
     if (!NewNet->IsNode(EI.GetSrcNId())) { NewNet->AddNode(EI.GetSrcNId()); }
@@ -87,12 +105,12 @@ void node2vec(PNGraph& InNet, double& ParamP, double& ParamQ, int& Dimensions,
     NewNet->AddEdge(EI.GetSrcNId(), EI.GetDstNId(), 1.0);
   }
   node2vec(NewNet, ParamP, ParamQ, Dimensions, WalkLen, NumWalks, WinSize, Iter, 
-   Verbose, EmbeddingsHV, NumRandomSample);
+   Verbose, EmbeddingsHV, NumRandomSample, SelectedNodes);
 }
 
 void node2vec(PNEANet& InNet, double& ParamP, double& ParamQ,
  int& Dimensions, int& WalkLen, int& NumWalks, int& WinSize, int& Iter, bool& Verbose,
- TIntFltVH& EmbeddingsHV, double& NumRandomSample) {
+ TIntFltVH& EmbeddingsHV, double& NumRandomSample, TIntV& SelectedNodes) {
   PWNet NewNet = PWNet::New();
   for (TNEANet::TEdgeI EI = InNet->BegEI(); EI < InNet->EndEI(); EI++) {
     if (!NewNet->IsNode(EI.GetSrcNId())) { NewNet->AddNode(EI.GetSrcNId()); }
@@ -100,5 +118,5 @@ void node2vec(PNEANet& InNet, double& ParamP, double& ParamQ,
     NewNet->AddEdge(EI.GetSrcNId(), EI.GetDstNId(), InNet->GetFltAttrDatE(EI,"weight"));
   }
   node2vec(NewNet, ParamP, ParamQ, Dimensions, WalkLen, NumWalks, WinSize, Iter, 
-   Verbose, EmbeddingsHV, NumRandomSample);
+   Verbose, EmbeddingsHV, NumRandomSample, SelectedNodes);
 }

@@ -8,7 +8,7 @@
 
 void ParseArgs(int& argc, char* argv[], TStr& InFile, TStr& OutFile,
  int& Dimensions, int& WalkLen, int& NumWalks, int& WinSize, int& Iter,
- bool& Verbose, double& ParamP, double& ParamQ, double& NumRandomSample, bool& Directed, bool& Weighted) {
+ bool& Verbose, double& ParamP, double& ParamQ, double& NumRandomSample, TStr& SelectedNodesFile, bool& Directed, bool& Weighted) {
   Env = TEnv(argc, argv, TNotify::StdNotify);
   Env.PrepArgs(TStr::Fmt("\nAn algorithmic framework for representational learning on graphs."));
   InFile = Env.GetIfArgPrefixStr("-i:", "graph/karate.edgelist",
@@ -31,7 +31,9 @@ void ParseArgs(int& argc, char* argv[], TStr& InFile, TStr& OutFile,
    "Inout hyperparameter. Default is 1");
   NumRandomSample = Env.GetIfArgPrefixInt("-s:", -1, 
    "Number of randomly sampled nodes. Default is -1 (sample all nodes)");
-      
+  SelectedNodesFile = Env.GetIfArgPrefixStr("-f:", "", 
+   "File containing the IDs of all nodes to embed. Set random sample to -1 if in use"); 
+
   Verbose = Env.IsArgStr("-v", "Verbose output.");
   Directed = Env.IsArgStr("-dr", "Graph is directed.");
   Weighted = Env.IsArgStr("-w", "Graph is weighted.");
@@ -88,18 +90,44 @@ void WriteOutput(TStr& OutFile, TIntFltVH& EmbeddingsHV) {
   }
 }
 
+void ReadSelectedNodes(TStr& SelectedNodesFile, TIntV& SelectedNodes, bool& Verbose) {
+    if(SelectedNodesFile == "") {
+        printf("No selected nodes file.\n");
+        return;
+     }
+    TFIn FIn(SelectedNodesFile);
+    int64 LineCnt = 0;
+    try {
+      while (!FIn.Eof()) {
+        TStr Ln;
+        FIn.GetNextLn(Ln);
+        int64 NId = Ln.GetInt();
+        SelectedNodes.Add(NId);
+        LineCnt++;
+      }
+      if (Verbose) printf("Read %lld lines from %s\n", (long long) LineCnt, SelectedNodesFile.CStr());
+    } catch (PExcept Except) {
+      if (Verbose) {
+        printf("Read %lld lines from %s, then %s\n", (long long)LineCnt, SelectedNodesFile.CStr(),
+         Except->GetStr().CStr());
+      }
+    }
+}
+
 int main(int argc, char* argv[]) {
-  TStr InFile,OutFile;
+  TStr InFile,OutFile,SelectedNodesFile;
   int Dimensions, WalkLen, NumWalks, WinSize, Iter;
   double ParamP, ParamQ, NumRandomSample;
   bool Directed, Weighted, Verbose;
   ParseArgs(argc, argv, InFile, OutFile, Dimensions, WalkLen, NumWalks, WinSize,
-   Iter, Verbose, ParamP, ParamQ, NumRandomSample, Directed, Weighted);
+   Iter, Verbose, ParamP, ParamQ, NumRandomSample, SelectedNodesFile, Directed, Weighted);
   PWNet InNet = PWNet::New();
   TIntFltVH EmbeddingsHV;
   ReadGraph(InFile, Directed, Weighted, Verbose, InNet);
+  TIntV SelectedNodes;
+  ReadSelectedNodes(SelectedNodesFile, SelectedNodes, Verbose);
   node2vec(InNet, ParamP, ParamQ, Dimensions, WalkLen, NumWalks, WinSize, Iter, 
-   Verbose, EmbeddingsHV, NumRandomSample);
+   Verbose, EmbeddingsHV, NumRandomSample, SelectedNodes);
   WriteOutput(OutFile, EmbeddingsHV);
   return 0;
 }
