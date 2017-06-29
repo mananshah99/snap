@@ -91,6 +91,7 @@ void WriteOutput(TStr& OutFile, TIntFltVH& EmbeddingsHV) {
 }
 
 void ReadSelectedNodes(TStr& SelectedNodesFile, TIntV& SelectedNodes, bool& Verbose) {
+    //== operator also checks for CStr equality
     if(SelectedNodesFile == "") {
         printf("No selected nodes file.\n");
         return;
